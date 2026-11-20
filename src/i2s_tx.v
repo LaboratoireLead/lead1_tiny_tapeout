@@ -9,6 +9,9 @@
  * - Échantillons de 24 bits signés, envoyés en tête du mot de 32 bits (8 zéros derrière).
  * - MCLK = clk / 4 (12,288 MHz = 256 fs à 49,152 MHz) : indispensable au CS4344 du Pmod I2S2.
  * - Toutes les sorties sont des bascules : pas de parasites sur les broches.
+ * - Les comparaisons (position dans la période de BCLK, numéro du bit) sont calculées un
+ *   cycle à l'avance et mémorisées dans des bascules : en GF180 au coin lent, comparer puis
+ *   charger le registre à décalage dans le même cycle dépassait 20 ns (E-386).
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -39,6 +42,26 @@ module i2s_tx #(
 
   wire [5:0] b_suiv = b + 6'd1;
 
+  // Indicateurs préparés un cycle à l'avance (vrais pendant le cycle où ils servent)
+  reg monte, descend;            // ce cycle : front montant / descendant de BCLK
+  reg vers_0, vers_1, vers_33;   // le prochain bit sera le n° 0 / 1 / 33
+  always @(posedge clk) begin
+    if (!rst_n) begin
+      monte   <= 1'b0;
+      descend <= 1'b0;
+      vers_0  <= 1'b0;
+      vers_1  <= 1'b0;
+      vers_33 <= 1'b0;
+    end else begin
+      monte   <= (p == DIV_BCLK / 2 - 2);
+      descend <= (p == DIV_BCLK - 2);
+      // b ne change qu'au front descendant : ces valeurs sont stables bien avant l'usage
+      vers_0  <= (b == 6'd63);
+      vers_1  <= (b == 6'd0);
+      vers_33 <= (b == 6'd32);
+    end
+  end
+
   always @(posedge clk) begin
     if (!rst_n) begin
       p           <= 0;
@@ -52,25 +75,25 @@ module i2s_tx #(
       pas         <= 1'b0;
     end else begin
       pas <= 1'b0;
-      if (p == DIV_BCLK / 2 - 1) begin
+      if (monte) begin
         bclk <= 1'b1;                       // front montant : le convertisseur lit sd
         p    <= p + 1'b1;
-      end else if (p == DIV_BCLK - 1) begin
+      end else if (descend) begin
         // front descendant : passage au bit b_suiv
         p     <= 0;
         b     <= b_suiv;
         bclk  <= 1'b0;
         lrclk <= b_suiv[5];
-        if (b_suiv == 6'd0) begin
+        if (vers_0) begin
           // début de trame : les deux échantillons sont pris ensemble
           gauche_memo <= gauche;
           droite_memo <= droite;
           pas         <= 1'b1;
         end
-        if (b_suiv == 6'd1) begin
+        if (vers_1) begin
           sd      <= gauche_memo[23];
           reg_dec <= {gauche_memo[22:0], 9'd0};
-        end else if (b_suiv == 6'd33) begin
+        end else if (vers_33) begin
           sd      <= droite_memo[23];
           reg_dec <= {droite_memo[22:0], 9'd0};
         end else begin
