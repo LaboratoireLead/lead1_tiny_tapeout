@@ -33,26 +33,30 @@ module generateur_test #(
   // Calcul en 3 étages de bascules : en GF180 au coin lent, le chemin phase → table →
   // changement de signe → sortie ne tient pas en un cycle de 20 ns (E-384). La phase ne
   // change qu'une fois par trame (1 024 cycles) : le retard de 3 cycles est sans effet.
-  reg  [7:0]  indice_g, indice_d;    // étage 1 : indice dans la table
+  reg  [5:0]  j_g, j_d;              // étage 1 : case du quart d'onde (63 − j déjà appliqué)
+  reg         neg1_g, neg1_d;        //           et signe (quadrants 2 et 3)
   wire [15:0] q_g, q_d;              // valeur du quart d'onde (sans signe)
   reg  [15:0] q_g_r, q_d_r;          // étage 2 : sortie de la table
   reg         neg_g, neg_d;          //           et signe (quadrants 2 et 3)
   reg  signed [23:0] gauche_r, droite_r;  // étage 3 : échantillons
 
-  quart_sinus u_q_g (.indice(indice_g), .q(q_g));
-  quart_sinus u_q_d (.indice(indice_d), .q(q_d));
+  quart_sinus u_q_g (.j(j_g), .q(q_g));
+  quart_sinus u_q_d (.j(j_d), .q(q_d));
 
   always @(posedge clk) begin
     if (!rst_n) begin
-      indice_g <= 8'd0;  indice_d <= 8'd0;
+      j_g      <= 6'd0;  j_d      <= 6'd0;
+      neg1_g   <= 1'b0;  neg1_d   <= 1'b0;
       q_g_r    <= 16'd0; q_d_r    <= 16'd0;
       neg_g    <= 1'b0;  neg_d    <= 1'b0;
       gauche_r <= 24'sd0; droite_r <= 24'sd0;
     end else begin
-      indice_g <= phase_g[23:16];
-      indice_d <= phase_d[23:16];
-      q_g_r    <= q_g;  neg_g <= indice_g[7];
-      q_d_r    <= q_d;  neg_d <= indice_d[7];
+      j_g      <= phase_g[22] ? ~phase_g[21:16] : phase_g[21:16];  // 63 − j aux quadrants 1 et 3
+      j_d      <= phase_d[22] ? ~phase_d[21:16] : phase_d[21:16];
+      neg1_g   <= phase_g[23];
+      neg1_d   <= phase_d[23];
+      q_g_r    <= q_g;  neg_g <= neg1_g;
+      q_d_r    <= q_d;  neg_d <= neg1_d;
       // 16 bits placés en tête des 24 bits, puis −12 dB (division par 4) pour ménager les oreilles
       gauche_r <= !actif ? 24'sd0 : neg_g ? -$signed({2'b00, q_g_r, 6'd0}) : $signed({2'b00, q_g_r, 6'd0});
       droite_r <= !actif ? 24'sd0 : neg_d ? -$signed({2'b00, q_d_r, 6'd0}) : $signed({2'b00, q_d_r, 6'd0});
@@ -68,14 +72,12 @@ endmodule
  * Quart d'onde d'un sinus sur 256 points (valeur absolue) :
  * Q[i] = arrondi(32767 · sin(2π (i + 0,5) / 256)), table produite par un script Python
  * (même formule dans test/test.py pour la vérification au bit près). Le signe (quadrants
- * 2 et 3) est appliqué par le module appelant.
+ * 2 et 3) et le sens de lecture (quadrants 1 et 3) sont traités par le module appelant.
  */
 module quart_sinus (
-    input  wire [7:0]  indice,
+    input  wire [5:0]  j,
     output reg  [15:0] q
 );
-
-  wire [5:0] j = indice[6] ? ~indice[5:0] : indice[5:0];  // 63 − j aux quadrants 1 et 3
 
   always @(*) begin
     case (j)
