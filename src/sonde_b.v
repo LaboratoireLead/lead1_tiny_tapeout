@@ -121,7 +121,7 @@ module sonde_voie_b (
   mult_2etages #(.LA(17), .LB(17)) u_m0 (.clk(clk), .a({1'b0, p_gain}), .b({1'b0, p_e0}), .p(m0));
   mult_2etages #(.LA(17), .LB(17)) u_m1 (.clk(clk), .a({1'b0, p_gain}), .b({1'b0, p_e1}), .p(m1));
 
-  integer k;
+  integer k_ph, k_acc;   // une variable de boucle par bloc (sinon : pilotes multiples)
   always @(posedge clk) begin
     if (!rst_n) begin
       p_o <= 3'd0;  p_ok <= 1'b0;  p_inc <= 24'd0;  p_w <= 4'd0;  p_gain <= 16'd0;
@@ -161,7 +161,7 @@ module sonde_voie_b (
     if (!rst_n) begin
       th <= 24'd0; c_inc <= 24'd0; amp <= 20'd0; c_damp <= 17'sd0;
       c_w <= 4'd0; c_o <= 3'd0; c_ok <= 1'b0; c_creneau <= 10'd0;
-      for (k = 0; k < 8; k = k + 1) phase_osc[k] <= 24'd0;
+      for (k_ph = 0; k_ph < 8; k_ph = k_ph + 1) phase_osc[k_ph] <= 24'd0;
     end else if (ech == 4'd15) begin
       if (c_ok) phase_osc[c_o] <= th_suiv;     // phase au début du bloc suivant
       th <= p_phase;  c_inc <= p_inc;  amp <= {p_a0, 4'd0};  c_damp <= p_damp;
@@ -260,9 +260,9 @@ module sonde_voie_b (
   endfunction
   always @(posedge clk) begin
     if (!rst_n) begin
-      for (k = 0; k < 32; k = k + 1) begin
-        acc[k]    <= 26'sd0;
-        sortie[k] <= 24'sd0;
+      for (k_acc = 0; k_acc < 32; k_acc = k_acc + 1) begin
+        acc[k_acc]    <= 26'sd0;
+        sortie[k_acc] <= 24'sd0;
       end
     end else if (e9_t[5]) begin
       acc[e9_t[4:0]]    <= {{3{e9_c[22]}}, e9_c};   // premier créneau : on repart de zéro
