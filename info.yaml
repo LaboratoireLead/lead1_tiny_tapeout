@@ -18,6 +18,8 @@ project:
   # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
   source_files:
     - "project.v"
+    - "i2s_tx.v"
+    - "generateur_test.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
@@ -26,17 +28,17 @@ pinout:
   ui[0]: "SPI_CS (mises à jour, RP2350 GPIO17)"
   ui[1]: "SPI_SCK (RP2350 GPIO18)"
   ui[2]: "SPI_MOSI (RP2350 GPIO19)"
-  ui[3]: ""
+  ui[3]: "TEST_TONE (1 = son de test)"
   ui[4]: ""
   ui[5]: ""
   ui[6]: ""
   ui[7]: ""
 
   # Outputs
-  uo[0]: "I2S_BCLK"
-  uo[1]: "I2S_LRCLK"
-  uo[2]: "I2S_SD"
-  uo[3]: "I2S_MCLK (option)"
+  uo[0]: "I2S_MCLK (Pmod I2S2)"
+  uo[1]: "I2S_LRCLK (Pmod I2S2)"
+  uo[2]: "I2S_BCLK (Pmod I2S2 SCLK)"
+  uo[3]: "I2S_SD (Pmod I2S2 SDIN)"
   uo[4]: ""
   uo[5]: ""
   uo[6]: ""

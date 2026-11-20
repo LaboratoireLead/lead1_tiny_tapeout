@@ -7,11 +7,14 @@
 module tb ();
 
   // Dump the signals to a FST file. You can view it with gtkwave or surfer.
+  // (désactivé par TRACE=0 dans make, pour les longues simulations qui produisent un WAV)
+`ifndef SANS_TRACE
   initial begin
     $dumpfile("tb.fst");
     $dumpvars(0, tb);
     #1;
   end
+`endif
 
   // Wire up the inputs and outputs:
   reg clk;
@@ -45,5 +48,12 @@ module tb ();
       .clk    (clk),      // clock
       .rst_n  (rst_n)     // not reset
   );
+
+  // Signaux I2S nommés, pour que le test cocotb puisse attendre leurs fronts
+  // (brochage du Digilent Pmod I2S2, rangée du haut)
+  wire mclk  = uo_out[0];
+  wire lrclk = uo_out[1];
+  wire bclk  = uo_out[2];
+  wire sd    = uo_out[3];
 
 endmodule

@@ -6,7 +6,7 @@ SIM ?= icarus
 FST ?= -fst # Use more efficient FST format
 TOPLEVEL_LANG ?= verilog
 SRC_DIR = $(PWD)/../src
-PROJECT_SOURCES = project.v
+PROJECT_SOURCES = project.v i2s_tx.v generateur_test.v
 
 ifneq ($(GATES),yes)
 
@@ -29,6 +29,11 @@ VERILOG_SOURCES += $(PDK_ROOT)/gf180mcuD/libs.ref/gf180mcu_fd_sc_mcu7t5v0/verilo
 # this gets copied in by the GDS action workflow
 VERILOG_SOURCES += $(PWD)/gate_level_netlist.v
 
+endif
+
+# TRACE=0 : pas de fichier de chronogrammes tb.fst (simulations longues)
+ifeq ($(TRACE),0)
+COMPILE_ARGS    += -DSANS_TRACE
 endif
 
 # Allow sharing configuration between design and testbench via `include`:
