@@ -20,6 +20,8 @@ project:
     - "project.v"
     - "i2s_tx.v"
     - "generateur_test.v"
+    - "sonde_b.v"
+    - "sonde_tables.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
@@ -29,7 +31,7 @@ pinout:
   ui[1]: "SPI_SCK (RP2350 GPIO18)"
   ui[2]: "SPI_MOSI (RP2350 GPIO19)"
   ui[3]: "TEST_TONE (1 = son de test)"
-  ui[4]: ""
+  ui[4]: "SONDE (1 = synthèse piste B d'essai)"
   ui[5]: ""
   ui[6]: ""
   ui[7]: ""

@@ -187,3 +187,83 @@ async def test_silence(dut):
     assert not dec.erreurs, dec.erreurs[:5]
     assert len(dec.gauche) >= 18, f"seulement {len(dec.gauche)} trames"
     assert all(v == 0 for v in dec.gauche + dec.droite), "son en sortie alors que le son de test est coupé"
+
+
+# ------------------------------------------------------------------------------------------
+# Sonde de vitesse de la piste B (src/sonde_b.v) : modèle au bit près et test
+# ------------------------------------------------------------------------------------------
+import tables_sonde as TS  # noqa: E402
+
+
+def modele_sonde(n_blocs):
+    """Échantillons (gauche, droite) de la sonde, bloc après bloc, comme le circuit.
+    Au bloc 0, l'oscillateur 0 est muet (sa préparation n'a pas eu lieu avant le démarrage)
+    et sa phase n'avance pas."""
+    def c(o, b, i):
+        p = o >> 1
+        if o == 0 and b == 0:
+            return 0
+        age = b % TS.BLOCS_FRAME
+        a0 = (TS.GAIN[o] * TS.ENV[age]) >> 16
+        a1 = (TS.GAIN[o] * TS.ENV[age + 1]) >> 16
+        amp = (a0 * 16 + i * (a1 - a0)) >> 4
+        blocs_joues = b - 1 if o == 0 else b
+        th = (TS.INC[p] * (16 * blocs_joues + i)) & 0xFFFFFF
+        pos = (th >> 6) & 0xFFFF
+        if th & (1 << 22):
+            pos ^= 0xFFFF
+        j, fr = pos >> 8, pos & 0xFF
+        sabs = TS.Q[j] + ((TS.D[j] * fr) >> 8)
+        sn = -sabs if th & (1 << 23) else sabs
+        s = sn + ((TS.W[p] * TS.DIF[th >> 16]) >> 4)
+        return (amp * s) >> 12
+
+    def sat(x):
+        return max(-(1 << 23), min((1 << 23) - 1, x))
+
+    g, d = [], []
+    for b in range(n_blocs):
+        for i in range(16):
+            g.append(sat(sum(c(o, b, i) for o in (0, 2, 4, 6))))
+            d.append(sat(sum(c(o, b, i) for o in (1, 3, 5, 7))))
+    return g, d
+
+
+@cocotb.test()
+async def test_sonde_piste_b(dut):
+    """Sonde de la piste B (ui_in[4] = 1) : sortie identique au modèle au bit près ; WAV écrit."""
+    duree_ms = float(os.environ.get("DUREE_MS", "5" if os.environ.get("GATES") == "yes" else "20"))
+    n_trames = int(duree_ms * FE / 1000)
+
+    cocotb.start_soon(Clock(dut.clk, PERIODE_PS, unit="ps").start())
+    dut.ena.value = 1
+    dut.ui_in.value = 0b10000
+    dut.uio_in.value = 0
+    dut.rst_n.value = 0
+    await ClockCycles(dut.clk, 10)
+    dut.rst_n.value = 1
+
+    dec = DecodeurI2S(dut)
+    cocotb.start_soon(dec.tourner())
+    await ClockCycles(dut.clk, (n_trames + 2) * CYCLES_PAR_TRAME)
+    dec.actif = False
+
+    assert not dec.erreurs, dec.erreurs[:5]
+    n = min(len(dec.gauche), len(dec.droite))
+    chemin = ecrire_wav("sonde_piste_b.wav", dec.gauche[:n], dec.droite[:n])
+    g = [v >> 8 for v in dec.gauche[:n]]
+    d = [v >> 8 for v in dec.droite[:n]]
+
+    debut = next((i for i in range(n) if g[i] != 0 or d[i] != 0), None)
+    assert debut is not None, "la sonde ne produit aucun son"
+    mg, md = modele_sonde(n // 16 + 4)
+    # le premier échantillon non nul du circuit doit être le premier non nul du modèle
+    k = next(i for i in range(len(mg)) if mg[i] != 0 or md[i] != 0)
+    faux = [i for i in range(debut, n) if k + i - debut >= len(mg)
+            or g[i] != mg[k + i - debut] or d[i] != md[k + i - debut]]
+    assert not faux, (f"{len(faux)} échantillons différents du modèle sur {n - debut}, le premier à "
+                      f"l'indice {faux[0]} : circuit {g[faux[0]]}, {d[faux[0]]} ; modèle "
+                      f"{mg[k + faux[0] - debut]}, {md[k + faux[0] - debut]}")
+    crete = max(abs(v) for v in g + d) / (1 << 23)
+    dut._log.info(f"sonde : {n - debut} trames identiques au modèle (début à la trame {debut}) ; "
+                  f"crête {20 * math.log10(crete):.1f} dBFS ; WAV : {chemin}")

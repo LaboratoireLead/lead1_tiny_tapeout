@@ -7,6 +7,7 @@
  * Broches :
  *   ui_in[0..2]  lien SPI des mises à jour (CS, SCK, MOSI) — pas encore utilisé
  *   ui_in[3]     1 = son de test, 0 = silence
+ *   ui_in[4]     1 = sonde de vitesse de la piste B (4 pixels d'essai), prioritaire sur ui_in[3]
  *   uo_out[0..3] I2S vers la rangée du haut du Digilent Pmod I2S2 (convertisseur CS4344) :
  *                uo_out[0] MCLK (clk / 4 = 256 fs, obligatoire pour le CS4344)
  *                uo_out[1] LRCLK, uo_out[2] BCLK (SCLK), uo_out[3] SD (SDIN)
@@ -32,24 +33,43 @@ module tt_um_laboratoirelead_synth (
     input  wire       rst_n     // remise à zéro, active à 0
 );
 
-  // Entrée du son de test resynchronisée (elle vient de l'extérieur, sans lien avec clk)
-  reg [1:0] sync_test;
+  // Entrées de choix resynchronisées (elles viennent de l'extérieur, sans lien avec clk)
+  reg [1:0] sync_test, sync_sonde;
   always @(posedge clk) begin
-    if (!rst_n) sync_test <= 2'b00;
-    else        sync_test <= {sync_test[0], ui_in[3]};
+    if (!rst_n) begin
+      sync_test  <= 2'b00;
+      sync_sonde <= 2'b00;
+    end else begin
+      sync_test  <= {sync_test[0], ui_in[3]};
+      sync_sonde <= {sync_sonde[0], ui_in[4]};
+    end
   end
 
   wire               pas;
-  wire signed [23:0] gauche, droite;
+  wire signed [23:0] test_g, test_d, sonde_g, sonde_d;
+  reg  signed [23:0] gauche, droite;
 
   generateur_test u_test (
       .clk   (clk),
       .rst_n (rst_n),
       .actif (sync_test[1]),
       .pas   (pas),
-      .gauche(gauche),
-      .droite(droite)
+      .gauche(test_g),
+      .droite(test_d)
   );
+
+  sonde_voie_b u_sonde (
+      .clk   (clk),
+      .rst_n (rst_n),
+      .pas   (pas),
+      .gauche(sonde_g),
+      .droite(sonde_d)
+  );
+
+  always @(posedge clk) begin
+    gauche <= sync_sonde[1] ? sonde_g : test_g;
+    droite <= sync_sonde[1] ? sonde_d : test_d;
+  end
 
   wire bclk, lrclk, sd, mclk;
 
@@ -70,6 +90,6 @@ module tt_um_laboratoirelead_synth (
   assign uio_oe  = 8'h00;
 
   // Entrées pas encore utilisées (évite les avertissements)
-  wire _inutilise = &{ena, ui_in[7:4], ui_in[2:0], uio_in, 1'b0};
+  wire _inutilise = &{ena, ui_in[7:5], ui_in[2:0], uio_in, 1'b0};
 
 endmodule
